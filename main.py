@@ -78,3 +78,45 @@ class SimulatedNetwork:
             aesgcm = AESGCM(self.session_key)
             ciphertext = aesgcm.encrypt(nonce, plaintext, None)
             return nonce + ciphertext
+
+        class Client:
+            def __init__(self):
+                self.client_random = None
+                self.server_random = None
+                self.session_key = None
+
+            def encrypt_premaster(self, public_key_bytes, premaster):
+                server_pub_key = serialization.load_pem_public_key(public_key_bytes)
+                encrypted = server_pub_key.encrypt(
+                    premaster,
+                    padding.OAEP(
+                        mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                        algorithm=hashes.SHA256(),
+                        label=None
+                    )
+                )
+                return encrypted
+
+            def generate_session_key(self, premaster, server_random):
+                self.server_random = server_random
+                hkdf = HKDF(
+                    algorithm=hashes.SHA256(),
+                    length=32,
+                    salt=None,
+                    info=b'tls handshake',
+                )
+                material = premaster + self.client_random + self.server_random
+                self.session_key = hkdf.derive(material)
+                print(f"Client: Сеансовий ключ згенеровано: {self.session_key.hex()[:10]}...")
+
+            def encrypt_message(self, plaintext):
+                nonce = os.urandom(12)
+                aesgcm = AESGCM(self.session_key)
+                ciphertext = aesgcm.encrypt(nonce, plaintext, None)
+                return nonce + ciphertext
+
+            def decrypt_message(self, encrypted_data):
+                nonce = encrypted_data[:12]
+                ciphertext = encrypted_data[12:]
+                aesgcm = AESGCM(self.session_key)
+                return aesgcm.decrypt(nonce, ciphertext, None)
